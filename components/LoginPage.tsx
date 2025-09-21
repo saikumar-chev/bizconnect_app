@@ -1,7 +1,7 @@
 import React from 'react';
 import GoogleSignInButton from './GoogleSignInButton';
 import { AppView } from '../types';
-import { LogoIcon } from './icons';
+import { LogoIcon, BriefcaseIcon, LightbulbIcon, ChatAltIcon } from './icons';
 
 interface LoginPageProps {
   onLogin: (response: any) => void;
@@ -10,44 +10,72 @@ interface LoginPageProps {
 }
 
 const LoginPage: React.FC<LoginPageProps> = ({ onLogin, googleClientId, setView }) => {
+  const features = [
+    {
+      icon: <BriefcaseIcon className="h-6 w-6 text-teal-300" />,
+      title: "Solve Real-World Challenges",
+      description: "Tackle business problems posted by companies and earn rewards for your solutions."
+    },
+    {
+      icon: <LightbulbIcon className="h-6 w-6 text-teal-300" />,
+      title: "Launch Your Next Big Idea",
+      description: "Post your innovative ideas and connect with partners who can help bring them to life."
+    },
+    {
+      icon: <ChatAltIcon className="h-6 w-6 text-teal-300" />,
+      title: "Build Your Network",
+      description: "Engage with a community of entrepreneurs, innovators, and business leaders."
+    }
+  ];
+
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col overflow-hidden">
-      {/* Hero Section */}
-      <div className="bg-gradient-to-br from-slate-900 to-slate-700">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="py-20 text-center">
-            <h1 className="text-4xl md:text-6xl font-extrabold text-white tracking-tight">
-              <span className="block">Connect, Solve, and</span>
-              <span className="block text-teal-400">Grow Your Business</span>
-            </h1>
-            <p className="mt-6 max-w-2xl mx-auto text-lg text-slate-300/90">
-              Tap into a global network of experts to solve your toughest challenges, or discover and purchase the next big business idea.
-            </p>
+    <div className="min-h-screen w-full lg:grid lg:grid-cols-2">
+      {/* Left Side: Branding & Features */}
+      <div className="hidden lg:flex flex-col justify-between bg-gradient-to-br from-slate-900 to-slate-800 p-12 text-white">
+        <div>
+          <div className="flex items-center space-x-3">
+            <LogoIcon className="h-8 w-8 text-white"/>
+            <span className="text-2xl font-bold">BizConnect</span>
           </div>
+          <h1 className="mt-12 text-4xl font-bold tracking-tight">
+            The place where great ideas meet great opportunities.
+          </h1>
+          <p className="mt-4 text-slate-300">
+            Join a thriving ecosystem of innovators and businesses.
+          </p>
+        </div>
+        <div className="space-y-8">
+          {features.map((feature, index) => (
+            <div key={index} className="flex items-start space-x-4">
+              <div className="flex-shrink-0 bg-slate-700/50 p-3 rounded-full">{feature.icon}</div>
+              <div>
+                <h3 className="font-semibold">{feature.title}</h3>
+                <p className="text-sm text-slate-400">{feature.description}</p>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* Login Box */}
-      <div className="flex-grow flex flex-col justify-center items-center p-4 -mt-20">
-        <div className="max-w-sm w-full bg-white p-8 rounded-2xl shadow-lg text-center border border-slate-200/80">
-          <div className="flex justify-center items-center mb-4">
+      {/* Right Side: Login Form */}
+      <div className="flex flex-col items-center justify-center bg-slate-50 p-6 sm:p-12">
+        <div className="w-full max-w-sm">
+          <div className="lg:hidden flex justify-center items-center mb-6">
             <LogoIcon className="h-10 w-10 text-slate-700" />
           </div>
-          <h2 className="text-2xl font-bold text-slate-800">Welcome Back</h2>
-          <p className="text-slate-500 mt-1 mb-8">Sign in to continue to BizConnect</p>
+          <h2 className="text-center text-3xl font-bold text-slate-800">Sign in to your account</h2>
+          <p className="text-center text-slate-500 mt-2 mb-8">Welcome back! Please enter your details.</p>
           <GoogleSignInButton onLogin={onLogin} clientId={googleClientId} />
+          <div className="text-center mt-12 text-sm text-slate-500">
+            <div className="flex justify-center space-x-4 mb-2">
+              <button onClick={() => setView('about')} className="hover:underline">About</button>
+              <button onClick={() => setView('terms')} className="hover:underline">Terms</button>
+              <button onClick={() => setView('privacy')} className="hover:underline">Privacy</button>
+            </div>
+            <p>&copy; {new Date().getFullYear()} BizConnect. All rights reserved.</p>
+          </div>
         </div>
       </div>
-      <footer className="text-center p-4 text-slate-500 text-xs">
-        <div className="flex justify-center space-x-4 text-sm mb-2">
-          <button onClick={() => setView('about')} className="hover:underline text-slate-600">About</button>
-          <span className="text-slate-300">|</span>
-          <button onClick={() => setView('terms')} className="hover:underline text-slate-600">Terms of Service</button>
-          <span className="text-slate-300">|</span>
-          <button onClick={() => setView('privacy')} className="hover:underline text-slate-600">Privacy Policy</button>
-        </div>
-        <p>&copy; {new Date().getFullYear()} BizConnect. All rights reserved.</p>
-      </footer>
     </div>
   );
 };

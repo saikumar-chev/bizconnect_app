@@ -7,19 +7,20 @@ import HeroSection from './components/HeroSection';
 import ProblemList from './components/ProblemList';
 import IdeaList from './components/IdeaList';
 import Feed from './components/Feed';
-import Footer from './components/Footer';
-import Spinner from './components/Spinner';
-import Modal from './components/Modal';
+import Footer from './components/Footer'; 
+import Spinner from './components/Spinner'; 
 import CreatePostModal from './components/CreatePostModal';
 import EditProfileModal from './components/EditProfileModal';
 import ChatModal from './components/ChatModal';
 import DetailsModal from './components/DetailsModal';
+import ContentFormModal from './components/ContentFormModal';
 import ConfirmationModal from './components/ConfirmationModal';
 import AboutPage from './components/AboutPage';
 import ContactPage from './components/ContactPage';
 import TermsOfServicePage from './components/TermsOfServicePage';
 import PrivacyPolicyPage from './components/PrivacyPolicyPage';
 import ProfilePage from './components/ProfilePage';
+import UserListModal from './components/UserListModal';
 import LoginPage from './components/LoginPage';
 import { useAuth } from './useAuth';
 
@@ -46,6 +47,7 @@ const App: React.FC = () => {
   const [isDetailsModalOpen, setDetailsModalOpen] = useState(false);
   const [isChatModalOpen, setChatModalOpen] = useState(false);
   const [isEditProfileModalOpen, setEditProfileModalOpen] = useState(false);
+  const [userListModal, setUserListModal] = useState<{ isOpen: boolean; title: string; users: User[] }>({ isOpen: false, title: '', users: [] });
   const [selectedItemForDetails, setSelectedItemForDetails] = useState<Problem | Idea | null>(null);
   const [viewedUser, setViewedUser] = useState<User | null>(null);
   const [chatMessage, setChatMessage] = useState('');
@@ -79,10 +81,10 @@ const App: React.FC = () => {
   const { currentUser, setCurrentUser, onLogin } = useAuth(users);
 
   // Ref to hold the latest state for use in subscriptions, preventing stale closures.
-  const stateRef = useRef({ users, posts, currentUser, userChatIds, problems, ideas });
+  const stateRef = useRef({ users, posts, currentUser, userChatIds, problems, ideas, recentChats });
   useEffect(() => {
-    stateRef.current = { users, posts, currentUser, userChatIds, problems, ideas };
-  });
+    stateRef.current = { users, posts, currentUser, userChatIds, problems, ideas, recentChats };
+  }, [users, posts, currentUser, userChatIds, problems, ideas, recentChats]);
 
 
   // --- Effects ---
@@ -426,7 +428,63 @@ const App: React.FC = () => {
           likes: [],
           comments: [],
         };
-        setPosts(prevPosts => [newPost, ...prevPosts]);
+        setPosts(prevPosts => [newPost, ...prevPosts].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()));
+      }
+    };
+
+    const handleNewPoll = (payload: RealtimePostgresChangesPayload<any>) => {
+      const newPollData = payload.new;
+      // This handler is tricky because options might arrive separately.
+      // The simplest robust solution is to refetch the post when a new poll is associated with it.
+      setPosts(prevPosts => {
+        const post = prevPosts.find(p => p.id === newPollData.postid);
+        if (post && !post.poll) { // Only update if the post doesn't already have a poll
+          const newPoll: Poll = { id: newPollData.pollid, options: [] }; // Options will be filled by poll_options trigger or next fetch
+          return prevPosts.map(p => p.id === newPollData.postid ? { ...p, poll: newPoll } : p);
+        }
+        return prevPosts;
+      });
+      // A more complex but complete solution would listen to poll_options inserts too.
+    };
+
+    // Function to handle new challenges
+    const handleNewChallenge = (payload: RealtimePostgresChangesPayload<any>) => {
+      const newChallengeData = payload.new;
+      const { users: currentUsersFromRef } = stateRef.current;
+      const author = currentUsersFromRef.find(u => u.userId === newChallengeData.user_id);
+      if (author) {
+        const newProblem: Problem = {
+          id: newChallengeData.challengeid,
+          title: newChallengeData.title,
+          description: newChallengeData.description,
+          detailedDescription: newChallengeData.detaileddescription,
+          industry: newChallengeData.industry,
+          reward: { type: newChallengeData.rewardtype, value: newChallengeData.rewardvalue },
+          postedBy: author,
+          createdAt: new Date(newChallengeData.createdat),
+          chatHistory: [],
+        };
+        setProblems(prev => [newProblem, ...prev].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()));
+      }
+    };
+
+    // Function to handle new ideas
+    const handleNewIdea = (payload: RealtimePostgresChangesPayload<any>) => {
+      const newIdeaData = payload.new;
+      const { users: currentUsersFromRef } = stateRef.current;
+      const author = currentUsersFromRef.find(u => u.userId === newIdeaData.user_id);
+      if (author) {
+        const newIdea: Idea = {
+          id: newIdeaData.ideaid,
+          title: newIdeaData.title,
+          summary: newIdeaData.summary,
+          detailedDescription: newIdeaData.detaileddescription,
+          reward: { type: newIdeaData.rewardtype, value: newIdeaData.rewardvalue },
+          postedBy: author,
+          createdAt: new Date(newIdeaData.createdat),
+          chatHistory: [],
+        };
+        setIdeas(prev => [newIdea, ...prev].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()));
       }
     };
 
@@ -503,7 +561,7 @@ const App: React.FC = () => {
       const isRelevantChat = currentChatIds.has(newMessage.chatid);
       const isFromOtherUser = user && newMessage.user_id !== user.userId;
 
-      if (!isRelevantChat || !isFromOtherUser) return;
+      if (!isRelevantChat || !user || !isFromOtherUser) return;
 
       const author = users.find(u => u.userId === newMessage.user_id);
       if (!author) return;
@@ -528,7 +586,7 @@ const App: React.FC = () => {
       }
 
       // 3. Update the "Recent Chats" list.
-      const existingChat = recentChats.find(c => c.chatId === newMessage.chatid);
+      const existingChat = stateRef.current.recentChats.find(c => c.chatId === newMessage.chatid);
       if (existingChat) {
         setRecentChats(prev => {
           const updated = { ...existingChat, lastMessageText: newMessage.text, lastMessageTimestamp: new Date(newMessage.createdat) };
@@ -575,9 +633,12 @@ const App: React.FC = () => {
 
     const usersInsertSub = supabase.channel('public-users-insert').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'users' }, handleNewUser).subscribe();
     const usersUpdateSub = supabase.channel('public-users-update').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users' }, handleUserUpdate).subscribe();
+    const challengesSub = supabase.channel('public-challenges').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'challenges' }, handleNewChallenge).subscribe();
+    const ideasSub = supabase.channel('public-ideas').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ideas' }, handleNewIdea).subscribe();
     const postsSub = supabase.channel('public-posts').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, handleNewPost).subscribe();
     const commentsSub = supabase.channel('public-comments').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comments' }, handleNewComment).subscribe();
     const likesSub = supabase.channel('public-likes').on('postgres_changes', { event: '*', schema: 'public', table: 'likes' }, handleLikeUpdate).subscribe();
+    const pollsSub = supabase.channel('public-polls').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'polls' }, handleNewPoll).subscribe();
     const chatParticipantsSub = supabase.channel('public-chat-participants').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_participants' }, handleNewChatParticipant).subscribe();
     const chatMessagesSub = supabase.channel('public-chat-messages').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, handleNewChatMessage).subscribe();
     const notificationsSub = supabase.channel('public-notifications').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, handleNewNotification).subscribe();
@@ -585,14 +646,17 @@ const App: React.FC = () => {
     return () => {
       supabase.removeChannel(usersInsertSub);
       supabase.removeChannel(usersUpdateSub);
+      supabase.removeChannel(challengesSub);
+      supabase.removeChannel(ideasSub);
       supabase.removeChannel(postsSub);
       supabase.removeChannel(commentsSub);
       supabase.removeChannel(likesSub);
+      supabase.removeChannel(pollsSub);
       supabase.removeChannel(chatParticipantsSub);
       supabase.removeChannel(chatMessagesSub);
       supabase.removeChannel(notificationsSub);
     };
-  }, [isLoading, recentChats]); // Add recentChats to dependency array to ensure the async function inside handleNewChatMessage has the latest version
+  }, [isLoading]); // Dependencies should only include values that, when changed, require subscriptions to be torn down and recreated.
 
   // --- Memoized Event Handlers for Performance ---
 
@@ -842,23 +906,68 @@ const App: React.FC = () => {
     }
   }, [currentUser]);
 
-  const handleCreatePost = useCallback(async (postData: { text: string; imageUrl?: string; poll?: Poll }) => {
-    await createContent<Post, any>({
-      contentName: 'post', currentUser, formData: postData,
-      requiredFields: ['text'],
-      buildLocalItem: () => ({
-        id: '', text: postData.text, imageUrl: postData.imageUrl, poll: postData.poll,
-        postedBy: currentUser!, createdAt: new Date(), likes: [], comments: [],
-      }),
-      buildDbItem: () => ({
-        text: postData.text, imageurl: postData.imageUrl, user_id: currentUser!.userId,
-      }),
-      tableName: 'posts', idField: 'postid', updateState: setPosts,
-      onSuccess: () => {
-        setCreatePostModalOpen(false);
-        setView('feed');
-      },
-    });
+  const handleCreatePost = useCallback(async (postData: { text: string; imageUrl?: string; poll?: Omit<Poll, 'id'> & { durationDays: number } }) => {
+    if (!currentUser) {
+      alert("Please log in to create a post.");
+      return;
+    }
+
+    // 1. Insert the post
+    const { data: post, error: postError } = await supabase
+      .from('posts')
+      .insert({ text: postData.text, imageurl: postData.imageUrl, user_id: currentUser.userId })
+      .select()
+      .single();
+
+    if (postError) {
+      alert(`Failed to create post: ${postError.message}`);
+      return;
+    }
+
+    let finalPoll: Poll | undefined = undefined;
+
+    // 2. If there's a poll, insert it and its options
+    if (postData.poll) {
+      const { data: poll, error: pollError } = await supabase
+        .from('polls')
+        .insert({ postid: post.postid, durationdays: postData.poll.durationDays })
+        .select()
+        .single();
+
+      if (pollError) {
+        alert(`Failed to create poll: ${pollError.message}`);
+        // Consider deleting the post here for consistency
+        return;
+      }
+
+      const pollOptionsToInsert = postData.poll.options.map(opt => ({ pollid: poll.pollid, text: opt.text }));
+      const { data: pollOptions, error: optionsError } = await supabase.from('poll_options').insert(pollOptionsToInsert).select();
+
+      if (optionsError) {
+        alert(`Failed to create poll options: ${optionsError.message}`);
+        // Consider cleanup
+        return;
+      }
+      finalPoll = { id: poll.pollid, options: pollOptions.map(opt => ({ id: opt.optionid, text: opt.text, votes: [] })) };
+    }
+
+    // Optimistic Update: Add the post to the state immediately for a responsive UI.
+    // The real-time subscription will handle this for other users.
+    const newPost: Post = {
+      id: post.postid,
+      text: postData.text,
+      imageUrl: postData.imageUrl,
+      postedBy: currentUser,
+      createdAt: new Date(post.createdat),
+      likes: [],
+      comments: [],
+      poll: finalPoll,
+    };
+    setPosts(prev => [newPost, ...prev]);
+
+    setCreatePostModalOpen(false);
+    setToastMessage("Post created successfully!");
+    setTimeout(() => setToastMessage(null), 3000);
   }, [currentUser]);
 
   const handleLikePost = useCallback(async (postId: string) => {
@@ -939,6 +1048,20 @@ const App: React.FC = () => {
       },
     });
   }, [currentUser]);
+
+  const handleShowUserList = useCallback((userIds: string[], title: string) => {
+    const userMap = new Map(users.map(u => [u.userId, u]));
+    const usersToShow = userIds.map(id => userMap.get(id)).filter(Boolean) as User[];
+    setUserListModal({
+      isOpen: true,
+      title,
+      users: usersToShow,
+    });
+  }, [users]);
+
+  const handleCloseUserListModal = () => {
+    setUserListModal({ isOpen: false, title: '', users: [] });
+  };
 
   const handleVoteOnPoll = useCallback(async (postId: string, optionId:string) => {
     if (!currentUser) return;
@@ -1123,7 +1246,7 @@ const App: React.FC = () => {
     
     switch (view) {
         case 'feed':
-            return <Feed posts={filteredPosts} currentUser={currentUser} onLikePost={handleLikePost} onAddComment={handleAddComment} onVoteOnPoll={handleVoteOnPoll} onViewProfile={handleViewProfile} onSharePost={handleSharePost} onDeletePost={handleDeletePost} onDeleteComment={handleDeleteComment} />;
+            return <Feed posts={filteredPosts} currentUser={currentUser} onLikePost={handleLikePost} onAddComment={handleAddComment} onVoteOnPoll={handleVoteOnPoll} onViewProfile={handleViewProfile} onSharePost={handleSharePost} onDeletePost={handleDeletePost} onDeleteComment={handleDeleteComment} onShowUserList={handleShowUserList} />;
         case 'problems':
             return <ProblemList 
                         problems={filteredProblems} 
@@ -1140,9 +1263,9 @@ const App: React.FC = () => {
             return viewedUser ? <ProfilePage 
                                     user={viewedUser} 
                                     currentUser={currentUser}
-                                    posts={posts.filter(p => p.postedBy.userId === viewedUser.userId)}
-                                    problems={problems.filter(p => p.postedBy.userId === viewedUser.userId)}
-                                    ideas={ideas.filter(i => i.postedBy.userId === viewedUser.userId)}
+                                    posts={posts}
+                                    problems={problems}
+                                    ideas={ideas}
                                     onViewProfile={handleViewProfile}
                                     onOpenDetails={handleOpenDetailsModal}
                                     onEditProfile={() => setEditProfileModalOpen(true)}
@@ -1154,6 +1277,7 @@ const App: React.FC = () => {
                                     onDeletePost={handleDeletePost}
                                     onDeleteChallenge={handleDeleteChallenge}
                                     onDeleteIdea={handleDeleteIdea}
+                                    onShowUserList={handleShowUserList}
                                 /> : null;
         case 'about':
             return <AboutPage />;
@@ -1305,109 +1429,23 @@ const App: React.FC = () => {
         currentUser={currentUser}
       />
 
-      {/* Post Challenge Modal */}
-      <Modal isOpen={isPostChallengeModalOpen} onClose={() => setPostChallengeModalOpen(false)} title="Post a New Challenge" size="lg">
-        <form onSubmit={handlePostChallengeSubmit}>
-            <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-                <div>
-                    <label htmlFor="title" className="block text-sm font-medium text-slate-700">Challenge Title</label>
-                    <input type="text" id="title" name="title" value={newChallenge.title} onChange={handleNewChallengeChange} className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm placeholder-slate-400 focus:outline-none focus:ring-slate-500 focus:border-slate-500 sm:text-sm" placeholder="e.g., Increase user engagement" required />
-                </div>
-                <div>
-                    <label htmlFor="description" className="block text-sm font-medium text-slate-700">Short Description (for card view)</label>
-                    <textarea id="description" name="description" value={newChallenge.description} onChange={handleNewChallengeChange} rows={2} className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm placeholder-slate-400 focus:outline-none focus:ring-slate-500 focus:border-slate-500 sm:text-sm" placeholder="Describe the business problem in 1-2 sentences." required></textarea>
-                </div>
-                 <div>
-                    <label htmlFor="detailedDescription" className="block text-sm font-medium text-slate-700">Detailed Description</label>
-                    <textarea id="detailedDescription" name="detailedDescription" value={newChallenge.detailedDescription} onChange={handleNewChallengeChange} rows={4} className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm placeholder-slate-400 focus:outline-none focus:ring-slate-500 focus:border-slate-500 sm:text-sm" placeholder="Provide a more detailed explanation of the challenge (3-4 sentences)." required></textarea>
-                </div>
-                <div>
-                    <label htmlFor="industry" className="block text-sm font-medium text-slate-700">Industry</label>
-                    <input type="text" id="industry" name="industry" value={newChallenge.industry} onChange={handleNewChallengeChange} className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm placeholder-slate-400 focus:outline-none focus:ring-slate-500 focus:border-slate-500 sm:text-sm" placeholder="e.g., SaaS" required />
-                </div>
-                 <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <label htmlFor="rewardType" className="block text-sm font-medium text-slate-700">Reward Type</label>
-                        <select id="rewardType" name="rewardType" value={newChallenge.rewardType} onChange={handleNewChallengeChange} className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-slate-300 focus:outline-none focus:ring-slate-500 focus:border-slate-500 sm:text-sm rounded-md bg-white">
-                            <option value="money">Money</option>
-                            <option value="equity">Equity</option>
-                            <option value="job">Job Offer</option>
-                            <option value="other">Other</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label htmlFor="rewardValue" className="block text-sm font-medium text-slate-700">Reward Value</label>
-                        <div className="relative mt-1 rounded-md shadow-sm">
-                            {newChallenge.rewardType === 'money' && (
-                                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                                    <span className="text-slate-500 sm:text-sm">₹</span>
-                                </div>
-                            )}
-                            <input type="text" id="rewardValue" name="rewardValue" value={newChallenge.rewardValue} onChange={handleNewChallengeChange} className={`block w-full rounded-md border-slate-300 py-2 pr-3 focus:border-slate-500 focus:ring-slate-500 sm:text-sm ${newChallenge.rewardType === 'money' ? 'pl-7' : 'pl-3'}`} placeholder={
-                                newChallenge.rewardType === 'money' ? "1,500" :
-                                newChallenge.rewardType === 'equity' ? "e.g., 5% Equity" :
-                                newChallenge.rewardType === 'job' ? "e.g., Lead Developer" : "Describe the reward"
-                            } required />
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div className="bg-slate-50 px-4 py-3 sm:px-6 flex justify-end space-x-2 border-t">
-                <button type="button" onClick={() => setPostChallengeModalOpen(false)} className="px-4 py-2 bg-white border border-slate-300 text-sm font-medium rounded-md hover:bg-slate-50">Cancel</button>
-                <button type="submit" className="px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-md hover:bg-slate-700">Submit Challenge</button>
-            </div>
-        </form>
-      </Modal>
-      
-      {/* Post Idea Modal */}
-      <Modal isOpen={isPostIdeaModalOpen} onClose={() => setPostIdeaModalOpen(false)} title="Post a New Idea" size="lg">
-        <form onSubmit={handlePostIdeaSubmit}>
-            <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-                <div>
-                    <label htmlFor="idea-title" className="block text-sm font-medium text-slate-700">Idea Title</label>
-                    <input type="text" id="idea-title" name="title" value={newIdea.title} onChange={handleNewIdeaChange} className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm placeholder-slate-400 focus:outline-none focus:ring-slate-500 focus:border-slate-500 sm:text-sm" placeholder="e.g., AI-Powered Meal Planning App" required />
-                </div>
-                <div>
-                    <label htmlFor="idea-summary" className="block text-sm font-medium text-slate-700">Summary (for card view)</label>
-                    <textarea id="idea-summary" name="summary" value={newIdea.summary} onChange={handleNewIdeaChange} rows={2} className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm placeholder-slate-400 focus:outline-none focus:ring-slate-500 focus:border-slate-500 sm:text-sm" placeholder="Summarize your idea in 1-2 sentences." required></textarea>
-                </div>
-                 <div>
-                    <label htmlFor="idea-detailedDescription" className="block text-sm font-medium text-slate-700">Detailed Description</label>
-                    <textarea id="idea-detailedDescription" name="detailedDescription" value={newIdea.detailedDescription} onChange={handleNewIdeaChange} rows={4} className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm placeholder-slate-400 focus:outline-none focus:ring-slate-500 focus:border-slate-500 sm:text-sm" placeholder="Provide a more detailed explanation of the idea, its features, and potential market." required></textarea>
-                </div>
-                 <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <label htmlFor="idea-rewardType" className="block text-sm font-medium text-slate-700">Reward Type</label>
-                        <select id="idea-rewardType" name="rewardType" value={newIdea.rewardType} onChange={handleNewIdeaChange} className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-slate-300 focus:outline-none focus:ring-slate-500 focus:border-slate-500 sm:text-sm rounded-md bg-white">
-                            <option value="money">Money</option>
-                            <option value="equity">Equity</option>
-                            <option value="job">Job Offer</option>
-                            <option value="other">Other</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label htmlFor="idea-rewardValue" className="block text-sm font-medium text-slate-700">Reward Value</label>
-                        <div className="relative mt-1 rounded-md shadow-sm">
-                            {newIdea.rewardType === 'money' && (
-                                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                                    <span className="text-slate-500 sm:text-sm">₹</span>
-                                </div>
-                            )}
-                            <input type="text" id="idea-rewardValue" name="rewardValue" value={newIdea.rewardValue} onChange={handleNewIdeaChange} className={`block w-full rounded-md border-slate-300 py-2 pr-3 focus:border-slate-500 focus:ring-slate-500 sm:text-sm ${newIdea.rewardType === 'money' ? 'pl-7' : 'pl-3'}`} placeholder={
-                                newIdea.rewardType === 'money' ? "25,000" :
-                                newIdea.rewardType === 'equity' ? "e.g., 10% Equity" :
-                                newIdea.rewardType === 'job' ? "e.g., Co-founder" : "Describe the reward"
-                            } required />
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div className="bg-slate-50 px-4 py-3 sm:px-6 flex justify-end space-x-2 border-t">
-                <button type="button" onClick={() => setPostIdeaModalOpen(false)} className="px-4 py-2 bg-white border border-slate-300 text-sm font-medium rounded-md hover:bg-slate-50">Cancel</button>
-                <button type="submit" className="px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-md hover:bg-slate-700">Submit Idea</button>
-            </div>
-        </form>
-      </Modal>
+      <ContentFormModal
+        type="challenge"
+        isOpen={isPostChallengeModalOpen}
+        onClose={() => setPostChallengeModalOpen(false)}
+        formData={newChallenge}
+        onFormChange={handleNewChallengeChange}
+        onSubmit={handlePostChallengeSubmit}
+      />
+
+      <ContentFormModal
+        type="idea"
+        isOpen={isPostIdeaModalOpen}
+        onClose={() => setPostIdeaModalOpen(false)}
+        formData={newIdea}
+        onFormChange={handleNewIdeaChange}
+        onSubmit={handlePostIdeaSubmit}
+      />
 
       <ChatModal
         isOpen={isChatModalOpen}
@@ -1429,6 +1467,14 @@ const App: React.FC = () => {
           onCancel={handleCancel}
         />
       )}
+
+      <UserListModal
+        isOpen={userListModal.isOpen}
+        onClose={handleCloseUserListModal}
+        title={userListModal.title}
+        users={userListModal.users}
+        onViewProfile={handleViewProfile}
+      />
 
       {/* --- Toast Notification --- */}
       {toastMessage && (

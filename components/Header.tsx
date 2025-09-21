@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AppView, RecentChat, User, AppNotification } from '../types';
-import { LightbulbIcon, BriefcaseIcon, LogoIcon, HomeIcon, ChatAltIcon, BellIcon, LogoutIcon, UserCircleIcon } from './icons';
+import { LightbulbIcon, BriefcaseIcon, LogoIcon, HomeIcon, ChatAltIcon, BellIcon, LogoutIcon, UserCircleIcon, MenuIcon, XIcon } from './icons';
 import GoogleSignInButton from './GoogleSignInButton';
 
 interface HeaderProps {
@@ -43,6 +43,7 @@ const Header: React.FC<HeaderProps> = ({
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isChatMenuOpen, setIsChatMenuOpen] = useState(false);
   const [isNotificationMenuOpen, setIsNotificationMenuOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const chatMenuRef = useRef<HTMLDivElement>(null);
   const notificationMenuRef = useRef<HTMLDivElement>(null);
@@ -59,6 +60,9 @@ const Header: React.FC<HeaderProps> = ({
       if (notificationMenuRef.current && !notificationMenuRef.current.contains(event.target as Node)) {
         setIsNotificationMenuOpen(false);
       }
+      // No need to check for mobile menu ref, as it's a full-screen overlay.
+      // Clicking outside is handled by the overlay itself if we add that functionality,
+      // but for now, it's closed with the 'X' button.
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -72,8 +76,18 @@ const Header: React.FC<HeaderProps> = ({
     }`;
   };
 
+  const renderActionButtons = (isMobile: boolean = false) => (
+    <>
+      {activeView === 'feed' && <button onClick={() => { onOpenCreatePostModal(); isMobile && setIsMobileMenuOpen(false); }} className="bg-slate-800 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-slate-700 transition-colors w-full">New Post</button>}
+      {activeView === 'problems' && <button onClick={() => { onPostChallengeClick(); isMobile && setIsMobileMenuOpen(false); }} className="bg-slate-800 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-slate-700 transition-colors w-full">Post Challenge</button>}
+      {activeView === 'ideas' && <button onClick={() => { onPostIdeaClick(); isMobile && setIsMobileMenuOpen(false); }} className="bg-slate-800 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-slate-700 transition-colors w-full">Post Idea</button>}
+    </>
+  );
+
+
   return (
-    <header className="bg-white/80 backdrop-blur-md sticky top-0 z-40 border-b border-slate-200">
+    <>
+      <header className="bg-white/80 backdrop-blur-md sticky top-0 z-40 border-b border-slate-200">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center space-x-4">
@@ -86,7 +100,8 @@ const Header: React.FC<HeaderProps> = ({
                 <span className="text-xl font-bold text-slate-800">BizConnect</span>
             </button>
           </div>
-          <div className="flex items-center space-x-2 bg-slate-100 p-1 rounded-lg">
+          {/* Desktop Navigation */}
+          <div className="hidden md:flex items-center space-x-2 bg-slate-100 p-1 rounded-lg">
             <button
               onClick={() => setActiveView('feed')}
               className={getButtonClasses('feed')}
@@ -112,24 +127,10 @@ const Header: React.FC<HeaderProps> = ({
               <span>Ideas</span>
             </button>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-1 sm:space-x-2">
             {currentUser && (
-              <div className="hidden sm:block">
-                {activeView === 'feed' && (
-                  <button onClick={onOpenCreatePostModal} className="bg-slate-800 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-slate-700 transition-colors">
-                    New Post
-                  </button>
-                )}
-                {activeView === 'problems' && (
-                  <button onClick={onPostChallengeClick} className="bg-slate-800 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-slate-700 transition-colors">
-                    Post Challenge
-                  </button>
-                )}
-                {activeView === 'ideas' && (
-                  <button onClick={onPostIdeaClick} className="bg-slate-800 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-slate-700 transition-colors">
-                    Post Idea
-                  </button>
-                )}
+              <div className="hidden md:block">
+                {renderActionButtons()}
               </div>
             )}
             
@@ -137,13 +138,7 @@ const Header: React.FC<HeaderProps> = ({
             {currentUser && (
               <div className="relative" ref={chatMenuRef}>
                 <button
-                  onClick={() => {
-                    setIsChatMenuOpen(!isChatMenuOpen);
-                    // Mark only chat notifications as read
-                    if (!isChatMenuOpen && hasUnreadChats) {
-                      onMarkNotificationsAsRead();
-                    }
-                  }}
+                  onClick={() => setIsChatMenuOpen(!isChatMenuOpen)}
                   className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-full transition-colors"
                   aria-label="Open chats"
                 >
@@ -153,7 +148,7 @@ const Header: React.FC<HeaderProps> = ({
                   )}
                 </button>
                 {isChatMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-80 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 py-1 z-50">
+                  <div className="fixed sm:absolute top-20 sm:top-auto sm:mt-2 left-1/2 -translate-x-1/2 sm:left-auto sm:right-0 sm:translate-x-0 w-[calc(100vw-2rem)] sm:w-80 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 py-1 z-50">
                     <div className="px-4 py-3 border-b">
                       <p className="text-sm font-medium text-slate-900">Recent Chats</p>
                     </div>
@@ -202,7 +197,7 @@ const Header: React.FC<HeaderProps> = ({
                   )}
                 </button>
                 {isNotificationMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-80 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 py-1 z-50">
+                  <div className="fixed sm:absolute top-20 sm:top-auto sm:mt-2 left-1/2 -translate-x-1/2 sm:left-auto sm:right-0 sm:translate-x-0 w-[calc(100vw-2rem)] sm:w-80 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 py-1 z-50">
                     <div className="px-4 py-3 border-b">
                       <p className="text-sm font-medium text-slate-900">Notifications</p>
                     </div>
@@ -253,10 +248,60 @@ const Header: React.FC<HeaderProps> = ({
             {!currentUser && (
               <GoogleSignInButton onLogin={onLogin} clientId={googleClientId} />
             )}
+
+            {/* Mobile Menu Button */}
+            {currentUser && (
+              <div className="md:hidden">
+                <button
+                  onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                  className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-full transition-colors"
+                  aria-label="Open main menu"
+                >
+                  <MenuIcon className="h-6 w-6" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+        </div>
+      </header>
+
+      {/* Mobile Menu Panel */}
+      <div className={`fixed inset-0 z-50 bg-white p-4 transform ${isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full'} transition-transform duration-300 ease-in-out md:hidden h-screen`}>
+        <div className="flex justify-between items-center mb-8">
+          <span className="text-xl font-bold text-slate-800">Menu</span>
+          <button onClick={() => setIsMobileMenuOpen(false)} className="p-2" aria-label="Close menu">
+            <XIcon className="h-6 w-6 text-slate-600" />
+          </button>
+        </div>
+        <div className="flex flex-col space-y-4">
+          <button
+            onClick={() => { setActiveView('feed'); setIsMobileMenuOpen(false); }}
+            className="text-left text-lg font-medium text-slate-700 hover:text-slate-900 p-2 rounded-md hover:bg-slate-100"
+          >
+            Feed
+          </button>
+          <button
+            onClick={() => { setActiveView('problems'); setIsMobileMenuOpen(false); }}
+            className="text-left text-lg font-medium text-slate-700 hover:text-slate-900 p-2 rounded-md hover:bg-slate-100"
+          >
+            Challenges
+          </button>
+          <button
+            onClick={() => { setActiveView('ideas'); setIsMobileMenuOpen(false); }}
+            className="text-left text-lg font-medium text-slate-700 hover:text-slate-900 p-2 rounded-md hover:bg-slate-100"
+          >
+            Ideas
+          </button>
+
+          <div className="pt-4 border-t border-slate-200">
+            {currentUser && (
+              <div className="w-full">{renderActionButtons(true)}</div>
+            )}
           </div>
         </div>
       </div>
-    </header>
+    </> 
   );
 };
 

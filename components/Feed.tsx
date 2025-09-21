@@ -1,5 +1,5 @@
 import React from 'react';
-import { Post, User } from '../types';
+import { Post, User, PollOption } from '../types';
 import PostCard from './PostCard';
 
 interface FeedProps {
@@ -12,9 +12,10 @@ interface FeedProps {
   onSharePost: (postId: string) => void;
   onDeletePost: (postId: string) => void;
   onDeleteComment: (postId: string, commentId: string) => void;
+  onShowUserList: (userIds: string[], title: string) => void;
 }
 
-const Feed: React.FC<FeedProps> = ({ posts, currentUser, onLikePost, onAddComment, onViewProfile, onDeleteComment, onVoteOnPoll, onSharePost, onDeletePost }) => {
+const Feed: React.FC<FeedProps> = ({ posts, currentUser, onLikePost, onAddComment, onViewProfile, onDeleteComment, onVoteOnPoll, onSharePost, onDeletePost, onShowUserList }) => {
   if (posts.length === 0) {
     return <p className="text-center text-slate-500">The feed is empty. Why not create the first post?</p>;
   }
@@ -33,6 +34,7 @@ const Feed: React.FC<FeedProps> = ({ posts, currentUser, onLikePost, onAddCommen
           onVoteOnPoll={onVoteOnPoll}
           onSharePost={onSharePost}
           onDeletePost={onDeletePost}
+          onShowUserList={onShowUserList}
         />
       ))}
     </div>

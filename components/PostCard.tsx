@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Post, User, Comment } from '../types';
+import { Post, User, Comment, PollOption } from '../types';
 import { HeartIcon, ChatBubbleIcon, PaperPlaneIcon, TrashIcon, ShareIcon } from './icons';
 
 interface PostCardProps {
@@ -12,6 +12,7 @@ interface PostCardProps {
   onVoteOnPoll: (postId: string, optionId: string) => void;
   onSharePost: (postId: string) => void;
   onDeletePost: (postId: string) => void;
+  onShowUserList: (userIds: string[], title: string) => void;
 }
 
 const PostCard: React.FC<PostCardProps> = ({
@@ -24,6 +25,7 @@ const PostCard: React.FC<PostCardProps> = ({
   onVoteOnPoll,
   onSharePost,
   onDeletePost,
+  onShowUserList,
 }) => {
   const [commentText, setCommentText] = useState('');
 
@@ -71,41 +73,63 @@ const PostCard: React.FC<PostCardProps> = ({
 
       {/* Poll Section */}
       {post.poll && currentUser && (
-        <div className="px-4 pt-2 pb-4 space-y-3">
-          {post.poll.options.map(option => {
-            const totalVotes = post.poll!.options.reduce((acc, opt) => acc + opt.votes.length, 0);
+        <div className="px-4 pt-2 pb-4 space-y-3">{(() => {
+          const poll = post.poll!; // We know poll is defined here from the check above
+          const totalVotes = poll.options.reduce((acc, opt) => acc + opt.votes.length, 0);
+          return <>
+            {poll.options.map(option => {
             const votePercentage = totalVotes > 0 ? (option.votes.length / totalVotes) * 100 : 0;
             const hasVotedForThis = option.votes.includes(currentUser.userId);
 
             return (
-              <button 
-                key={option.id} 
+              <button
+                key={option.id}
                 onClick={() => onVoteOnPoll(post.id, option.id)}
-                className="w-full text-left group"
+                className={`w-full text-left group relative border rounded-md p-3 transition-all duration-200 ${hasVotedForThis ? 'border-slate-400 bg-slate-100' : 'border-slate-300 hover:border-slate-400'}`}
               >
-                <div className="relative border border-slate-300 rounded-md p-3 group-hover:border-slate-400 transition-colors">
-                  <div 
-                    className="absolute top-0 left-0 h-full bg-slate-200/70 rounded-md transition-all duration-500 ease-out"
-                    style={{ width: `${votePercentage}%` }}
-                  ></div>
-                  <div className="relative flex justify-between items-center">
-                    <span className={`font-medium text-sm ${hasVotedForThis ? 'text-slate-900 font-bold' : 'text-slate-700'}`}>{option.text}</span>
-                    <span className="text-xs text-slate-500 font-semibold">{Math.round(votePercentage)}%</span>
+                  <div
+                      className="absolute top-0 left-0 h-full bg-teal-400/20 rounded-l-md transition-all duration-500 ease-out"
+                      style={{ width: `${votePercentage}%` }}
+                  />
+                  <div className="relative flex justify-between items-center z-10">
+                    <div className="flex items-center" onClick={e => e.stopPropagation()}>
+                      <span className={`font-medium text-sm ${hasVotedForThis ? 'text-slate-900 font-bold' : 'text-slate-700'}`}>{option.text}</span>
+                      {hasVotedForThis && <span className="ml-2 text-teal-600">✓</span>}
+                    </div>
+                    <div className="flex items-center space-x-4" onClick={e => e.stopPropagation()}>
+                      {option.votes.length > 0 ? (
+                        <button onClick={() => onShowUserList(option.votes, `Votes for "${option.text}"`)} className="text-xs text-slate-500 font-semibold hover:underline">
+                          {option.votes.length} {option.votes.length === 1 ? 'vote' : 'votes'}
+                        </button>
+                      ) : <span className="text-xs text-slate-400">0 votes</span>}
+                      <span className="text-sm text-slate-600 font-bold w-10 text-right">{Math.round(votePercentage)}%</span>
+                    </div>
                   </div>
-                </div>
               </button>
             );
-          })}
+            })}
+            <div className="text-right text-xs text-slate-500 pt-1">
+              Total Votes: <button onClick={() => onShowUserList(poll.options.flatMap(o => o.votes), 'All Voters')} className="font-semibold hover:underline">
+                {totalVotes}
+              </button>
+            </div>
+          </>})()}
         </div>
       )}
 
       {/* Post Actions */}
       <div className="p-4 flex justify-between items-center border-t border-slate-200">
         <div className="flex space-x-4">
-          <button onClick={() => onLikePost(post.id)} className="flex items-center space-x-1 text-slate-500 hover:text-red-500 transition-colors">
-            <HeartIcon className={`h-6 w-6 ${isLiked ? 'text-red-500' : ''}`} />
-            <span className="text-sm font-medium">{post.likes.length}</span>
-          </button>
+          <div className="flex items-center space-x-1 text-slate-500">
+            <button onClick={() => onLikePost(post.id)} className="p-1 rounded-full hover:bg-red-50" aria-label="Like post">
+              <HeartIcon className={`h-6 w-6 transition-colors ${isLiked ? 'text-red-500' : 'hover:text-red-500'}`} />
+            </button>
+            {post.likes.length > 0 ? (
+              <button onClick={() => onShowUserList(post.likes, 'Likes')} className="text-sm font-medium hover:underline">{post.likes.length} {post.likes.length === 1 ? 'like' : 'likes'}</button>
+            ) : (
+              <span className="text-sm font-medium">0 likes</span>
+            )}
+          </div>
           <div className="flex items-center space-x-1 text-slate-500">
             <ChatBubbleIcon className="h-6 w-6" />
             <span className="text-sm font-medium">{post.comments.length}</span>

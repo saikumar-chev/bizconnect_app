@@ -1,12 +1,16 @@
 import React, { useState, useRef, ChangeEvent } from 'react';
 import Modal from './Modal';
-import { Poll } from '../types';
+import { Poll, PollOption } from '../types';
 import { PhotographIcon, ChartBarIcon } from './icons';
 
 interface CreatePostModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreatePost: (postData: { text: string; imageUrl?: string; poll?: Poll }) => void;
+  onCreatePost: (postData: { 
+    text: string; 
+    imageUrl?: string; 
+    poll?: { options: { text: string }[], durationDays: number } 
+  }) => void;
 }
 
 const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClose, onCreatePost }) => {
@@ -39,24 +43,22 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClose, onCr
       return;
     }
     
-    let poll: Poll | undefined = undefined;
+    let pollData: { options: { text: string }[], durationDays: number } | undefined = undefined;
     if (isCreatingPoll) {
         const validOptions = pollOptions.filter(opt => opt.trim() !== '');
         if (validOptions.length < 2) {
             alert('A poll must have at least two options.');
             return;
         }
-        poll = {
-            durationDays: pollDuration,
-            options: validOptions.map((optText, index) => ({
-                id: `opt-${index + 1}`,
+        pollData = {
+            options: validOptions.map(optText => ({
                 text: optText,
-                votes: [],
             })),
+            durationDays: pollDuration,
         };
     }
     
-    onCreatePost({ text, imageUrl: imagePreview || undefined, poll });
+    onCreatePost({ text, imageUrl: imagePreview || undefined, poll: pollData });
     handleClose();
   };
 
@@ -143,7 +145,9 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClose, onCr
                         maxLength={50}
                     />
                     {pollOptions.length > 2 && (
-                        <button type="button" onClick={() => removePollOption(index)} className="text-slate-400 hover:text-slate-600">&times;</button>
+                        <button type="button" onClick={() => removePollOption(index)} className="p-1 rounded-full text-slate-400 hover:bg-slate-200 hover:text-slate-600" aria-label={`Remove option ${index + 1}`}>
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
                     )}
                 </div>
               ))}
